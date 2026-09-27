@@ -4,7 +4,13 @@
 // migration in prisma/migrations/ (generated tsvector, french + unaccent).
 
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+  // queryCompiler compiles queries to SQL in wasm (no glibc query-engine
+  // binary), driverAdapters executes via @prisma/adapter-pg — together they
+  // let Prisma Client run on Android/Termux's bionic libc (see README).
+  previewFeatures = ["queryCompiler", "driverAdapters"]
 }
 
 datasource db {
@@ -91,6 +97,12 @@ enum AuditOutcome {
   DENIED
 }
 
+enum IngestionRunStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
+}
+
 // ---------------------------------------------------------------------------
 // §5.1 Public catalogue (global, read-only for agents)
 // ---------------------------------------------------------------------------
@@ -167,6 +179,20 @@ model TenderEvent {
   at       DateTime        @default(now())
 
   @@index([tenderId, at])
+}
+
+model IngestionRun {
+  id           String             @id @default(uuid())
+  source       String // adapter id: "manual" | "tuneps" | "ministry:mtc" …
+  status       IngestionRunStatus @default(SUCCESS)
+  startedAt    DateTime           @default(now())
+  finishedAt   DateTime?
+  fetched      Int                @default(0)
+  upserted     Int                @default(0)
+  events       Int                @default(0)
+  errors       Json               @default("[]")
+
+  @@index([source, startedAt])
 }
 
 // ---------------------------------------------------------------------------

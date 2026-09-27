@@ -5,38 +5,52 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createApp } from "../../src/app.js";
+import type { Db } from "../../src/db.js";
+import {
+  closeServer,
+  closeTestDb,
+  createTenantWithToken,
+  deleteTenant,
+  listen,
+  testDb,
+  type TestTenantToken,
+} from "../helpers/db.js";
 
 /**
- * Proves the Cycle 1 spike: an MCP client (the SDK's own) can connect over
- * Streamable HTTP, list tools and call `echo`. MCP Inspector cannot run
- * interactively on this device, so this test is the proof (plan §8, 1.2).
+ * Proves the Cycle 1 spike, now behind Cycle 2 auth: an MCP client (the SDK's
+ * own) with a valid bearer token can connect over Streamable HTTP, list tools
+ * and call `echo`. MCP Inspector cannot run interactively on this device, so
+ * this test is the proof (plan §8, 1.2).
  */
 describe("MCP echo spike (Streamable HTTP)", () => {
+  let db: Db;
   let server: Server;
   let client: Client;
   let baseUrl: string;
+  let fixture: TestTenantToken;
 
   beforeAll(async () => {
-    const app = createApp();
-    await new Promise<void>((resolve) => {
-      server = app.listen(0, "127.0.0.1", () => resolve());
-    });
-    const address = server.address();
-    if (typeof address !== "object" || address === null) throw new Error("no address");
-    baseUrl = `http://127.0.0.1:${address.port}`;
+    db = testDb();
+    fixture = await createTenantWithToken(db, "echo");
+    const app = createApp(db);
+    ({ server, baseUrl } = await listen(app));
 
     client = new Client({ name: "vitest-client", version: "0.0.1" });
-    await client.connect(new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`)));
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`${baseUrl}/mcp`), {
+        requestInit: { headers: { authorization: `Bearer ${fixture.rawToken}` } },
+      }),
+    );
   });
 
   afterAll(async () => {
     await client.close();
-    await new Promise<void>((resolve, reject) =>
-      server.close((err) => (err ? reject(err) : resolve())),
-    );
+    await closeServer(server);
+    await deleteTenant(db, fixture.tenantId);
+    await closeTestDb();
   });
 
-  it("serves /healthz", async () => {
+  it("serves /healthz without a token", async () => {
     const res = await fetch(`${baseUrl}/healthz`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ status: "ok" });

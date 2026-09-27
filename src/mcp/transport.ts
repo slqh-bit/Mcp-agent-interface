@@ -5,8 +5,11 @@ import { createMcpServer } from "./server.js";
 
 /**
  * Stateless Streamable HTTP handler: one McpServer + transport pair per
- * request, torn down when the response closes. Stateful sessions (with
- * Mcp-Session-Id binding to tokens) arrive in Cycle 2 with auth.
+ * request, torn down when the response closes. There is deliberately no
+ * server-side session (sessionIdGenerator: undefined): the bearer token on
+ * each request is the only credential, which makes session↔token binding
+ * moot — a session id is never read, so one created under token A cannot be
+ * reused with token B (see src/auth/middleware.ts and the auth tests).
  */
 export async function handleMcpRequest(req: Request, res: Response): Promise<void> {
   const server = createMcpServer();
