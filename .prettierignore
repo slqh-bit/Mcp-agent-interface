@@ -1,0 +1,6 @@
+dist/
+node_modules/
+.pgdata/
+coverage/
+package-lock.json
+prisma/migrations/
